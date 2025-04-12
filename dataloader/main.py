@@ -29,9 +29,5 @@ if __name__ == "__main__":
     with CodeTimer("Downloader", unit="s"):
         download()
     with CodeTimer("Importer", unit="s"):
-        if config.NO_OF_PROCESSES == 1:
-            load_data()
-        elif config.NO_OF_PROCESSES > 1:
-            load_data_mp(config.NO_OF_PROCESSES, config.PAPER_BATCH_SIZE)
-        else:
-            config.NO_OF_PROCESSES
+        load_data()
+

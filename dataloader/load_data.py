@@ -11,7 +11,8 @@ import py2neo
 from pebble import ProcessPool
 from linetimer import CodeTimer
 from Configs import getConfig
-from py2neo import Graph
+# from py2neo import Graph
+from neo4j import GraphDatabase
 from dict2graph import Dict2graph
 
 
@@ -20,7 +21,13 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 log.setLevel(getattr(logging, config.LOG_LEVEL))
 log.info("Neo4j DB connection details: {}".format(config.NEO4J))
-graph = py2neo.Graph(**config.NEO4J)
+# graph = py2neo.Graph(**config.NEO4J)
+
+
+graph = GraphDatabase.driver(
+    "bolt://localhost:7687",
+    auth=("user","password")
+)
 
 
 class FullTextPaperJsonFilesIndex(object):
@@ -96,7 +103,7 @@ class Paper(object):
         self.paper_pmcid = row.pmcid if not pandas.isna(row.pmcid) else None
         self._load_full_json()
 
-        self.properties = {"cord19-fulltext_hash": self.paper_sha}
+        self.properties = {"cord19_fulltext_hash": self.paper_sha}
         self.PaperID = []
         self.Reference = []
         self.BodyText = []
@@ -216,14 +223,13 @@ class PaperParser(object):
         body_texts = []
         if self.paper._raw_data_json is not None:
             for body_text in self.paper._raw_data_json["body_text"]:
-                if "cite_spans" in body_text:
-                    self._link_references(body_text["cite_spans"])
-                # delete non needed data
-                if "eq_spans" in body_text:
-                    del body_text["eq_spans"]
-                if "ref_spans" in body_text:
-                    del body_text["ref_spans"]
-                self.paper.BodyText.append(body_text)
+                # Keep only the keys (structure), drop actual content
+                self.paper.BodyText.append({
+                    "section": body_text.get("section", "Unknown"),
+                    "properties_present": list(body_text.keys())
+                })
+
+
 
     def parse_abstract(self):
         abstract_sections = []
@@ -333,10 +339,14 @@ class Dataloader(object):
             pass
             log.debug("Load Data to DB...")
         try:
-            ct = CodeTimer("Create Indexes", silent=True, unit="s")
-            with ct:
-                self.loader.create_indexes(graph)
-            log.debug("Creating Indexes took {}s".format(ct.took))
+            # ct = CodeTimer("Create Indexes", silent=True, unit="s")
+            # with ct:
+            #     self.loader.create_indexes(graph)
+            # log.debug("Creating Indexes took {}s".format(ct.took))
+            self.loader.create_indexes(graph)
+        except AttributeError:
+            log.warning("[WARN] Skipping create_indexes(): not implemented in current Dict2graph.")
+
             ct = CodeTimer("Load to DB", silent=True, unit="s")
             with ct:
                 self.loader.merge(graph)
@@ -360,15 +370,16 @@ class Dataloader(object):
         # c.config_dict_label_override = config.JSON2GRAPH_LABELOVERRIDE
         # c.config_func_custom_relation_name_generator = DataTransformer.nameRelation
         c.config_dict_primarykey_generated_hashed_attrs_by_label = {
-            "BodyText": "AllAttributes",
-            "Paper": "AllAttributes",
+            "BodyText": ["section"],  # αφαίρεσε το "text"
+            "Paper": ["cord19_fulltext_hash"],  # ή όπως το έχεις ορίσει
             "Reference": "InnerContent",
-            "Location": "AllAttributes",
-            "Abstract": ["text"],  # Generate an id based on the property "text"
-            "Affiliation": "AllAttributes",  # Generate an id based all properties
-            "Author": "AllAttributes",
-            "Citation": "AllAttributes",
+            "Location": ["section"],
+            "Abstract": ["text"],
+            "Affiliation": ["section"],
+            "Author": ["last", "first"],  # πιο ελαφρύ από το να έχει text
+            "Citation": ["text"],
         }
+
         c.config_dict_concat_list_attr = {"Author": {"middle": " "}}
         c.config_str_collection_hub_label = "{LIST_MEMBER_LABEL}Collection"
         c.config_list_collection_hub_extra_labels = []

@@ -4,7 +4,7 @@ pebble
 git+https://github.com/motey/cord-19-tools
 requests
 graphio
-pandas
-pydash
-git+https://git.connect.dzd-ev.de/dzdpythonmodules/dict2graph.git@V2
-git+https://git.connect.dzd-ev.de/dzdpythonmodules/configs.git
+pandas==1.5.3
+pydash==5.1.2
+git+https://github.com/DZD-eV-Diabetes-Research/dict2graph.git@V3
+git+https://github.com/DZD-eV-Diabetes-Research/DZDConfig.git
